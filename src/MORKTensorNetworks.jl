@@ -38,6 +38,7 @@ include("shard/CrossShardJoin.jl")     # §5.6: join strategies (needs Semirings
 include("shard/ShardZipper.jl")        # §2: 6-step workflow (needs MORK + PathMap)
 include("hrt/HRT.jl")                  # §6: HRT pyramid (standalone)
 include("hrt/PredictiveCodingTrainer.jl") # §6.4: PC training (needs HRT)
+include("ecan/ECANTensorBridge.jl")    # §7.3: ECAN STI spreading + Hebbian + attention fund
 
 # Re-export public API from submodules
 using .Semirings
@@ -48,6 +49,7 @@ using .GPULayout
 using .CrossShardJoin
 using .HRT
 using .PredictiveCodingTrainer
+# ECANTensorBridge is top-level (no submodule wrapper)
 
 # ShardZipper is top-level (no submodule wrapper)
 # Semirings
@@ -58,7 +60,12 @@ export szero, sone, oplus, otimes, semiring_matmul, semiring_matvec, semiring_re
 export path_compose, path_union, path_intersect, path_restrict
 export path_project, path_reachability, path_viterbi, path_count, path_universal
 # TuckerDecomposition
-export tucker_decompose, tucker_reconstruct, tucker_decompose_2d, tucker_reconstruct_2d
+export tucker_decompose_2d, tucker_reconstruct_2d, should_densify
+export tucker_decompose_3d, tucker_reconstruct_3d
+export BCSRMatrix, dense_to_bcsr, bcsr_to_dense
+export ECANState, ecan_sti_spread!, ecan_hebbian_update!
+export ecan_collect_rent!, ecan_distribute_wages!
+export ecan_build_weight_matrix, ecan_sti_vector
 export should_densify
 # CrossShardJoin
 export HaloStrategy, BatchedBoundaryStrategy, ReshardStrategy, cross_shard_join, select_join_strategy

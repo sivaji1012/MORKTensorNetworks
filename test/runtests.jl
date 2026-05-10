@@ -92,4 +92,80 @@ using MORKTensorNetworks
         @test strat.halo_width == 1
     end
 
-end
+
+    @testset "BCSR — §5.1 Block CSR" begin
+        A = Float32[1 0 2 0;
+                    0 0 0 3;
+                    4 0 5 0;
+                    0 6 0 7]
+        bcsr = dense_to_bcsr(A, 2, 2)
+        @test bcsr isa BCSRMatrix{Float32}
+        @test bcsr.block_r == 2
+        @test bcsr.block_c == 2
+        A2 = bcsr_to_dense(bcsr)
+        @test A2 ≈ A
+
+        # Block size that evenly divides
+        B = rand(Float32, 4, 6)
+        bcsr2 = dense_to_bcsr(B, 2, 3)
+        @test bcsr_to_dense(bcsr2) ≈ B
+    end
+
+    @testset "Tucker 3D — §5.4 A_ijk ≈ C×M×N×P" begin
+        A = rand(Float32, 6, 5, 4)
+        C, M, N, P, err = tucker_decompose_3d(A, 3, 3, 3)
+        @test size(C) == (3, 3, 3)
+        @test size(M) == (6, 3)
+        @test size(N) == (5, 3)
+        @test size(P) == (4, 3)
+        @test err < 0.5   # rough reconstruction quality
+
+        A_recon = tucker_reconstruct_3d(C, M, N, P)
+        @test size(A_recon) == (6, 5, 4)
+
+        # Full rank → near-perfect reconstruction
+        A2 = rand(Float32, 4, 4, 4)
+        C2, M2, N2, P2, err2 = tucker_decompose_3d(A2, 4, 4, 4)
+        @test err2 < 0.05
+    end
+
+    @testset "ECAN tensor bridge — §7.3" begin
+        n = 4
+        state = ECANState(n)
+        state.sti = Float32[0.8, 0.3, 0.1, 0.6]
+
+        # §7.3.2: Build Hebbian weight matrix
+        links = [(1,2,0.5f0), (2,3,0.4f0), (3,4,0.3f0), (4,1,0.2f0)]
+        W = ecan_build_weight_matrix(links, n)
+        state.W = W
+        @test W[1,2] == 0.5f0
+        @test W[2,4] == -Inf32  # no link
+
+        # §7.3.1: STI spreading as (max,+) matmul
+        old_sti = copy(state.sti)
+        ecan_sti_spread!(state; decay=0.9f0)
+        @test length(state.sti) == n
+        @test all(isfinite, state.sti)
+        @test all(state.sti .>= 0.0f0)
+
+        # §7.3.2: Hebbian update — save original before update
+        state.sti = Float32[0.8, 0.3, 0.1, 0.6]
+        state.W   = copy(W)
+        w12_before = state.W[1,2]
+        ecan_hebbian_update!(state; η=0.1f0, decay=1.0f0)  # no decay → pure Hebbian
+        @test state.W[1,2] > w12_before  # co-active pair strengthened
+
+        # §7.3.3: Rent collection
+        state.sti = Float32[0.8, 0.3, 0.1, 0.6]
+        total_rent = ecan_collect_rent!(state; af_threshold=0.5f0, rent_rate=0.1f0)
+        @test total_rent > 0.0f0
+        @test state.sti[1] < 0.8f0   # high STI atom paid rent
+        @test state.sti[2] == 0.3f0  # below threshold — no rent
+
+        # §7.3.3: Wage distribution
+        state.sti = Float32[0.5, 0.2, 0.1, 0.4]
+        ecan_distribute_wages!(state, 0.1f0)
+        @test sum(state.sti) > 0.5f0 + 0.2f0 + 0.1f0 + 0.4f0 - 1e-5  # budget added
+    end
+
+end  # MORKTensorNetworks
